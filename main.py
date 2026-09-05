@@ -52,7 +52,7 @@ def get_boxoffice(target_dt):
 
     # Streamlit Cloud의 Secrets에서 인증키를 가져옵니다.
     # 실제 인증키는 코드에 직접 작성하지 않습니다.
-    api_key = st.secrets["4a3741de944ebaa4c3d4512fd624b8a2"]
+    api_key = st.secrets["KOBIS_KEY"]
 
     url = (
         "https://www.kobis.or.kr/kobisopenapi/webservice/rest/"
