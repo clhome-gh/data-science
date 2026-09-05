@@ -4,16 +4,16 @@ import plotly.express as px
 
 # 페이지 설정
 st.set_page_config(
-    page_title="서울 일별 평균기온 분포",
+    page_title="서울 최저기온과 최고기온",
     page_icon="🌡️",
     layout="wide"
 )
 
 # 제목
-st.title("🌡️ 서울의 일별 평균기온 분포")
+st.title("🌡️ 서울의 최저기온과 최고기온 관계")
 st.write(
-    "서울의 일별 평균기온이 어느 온도 구간에 얼마나 몰려 있는지 "
-    "히스토그램으로 확인합니다."
+    "날마다 측정된 최저기온과 최고기온의 관계를 "
+    "산점도로 확인합니다."
 )
 
 # 데이터 주소
@@ -26,16 +26,22 @@ def load_data():
     df = pd.read_csv(DATA_URL, encoding="utf-8-sig")
 
     # 날짜 변환
-    df["날짜"] = pd.to_datetime(df["날짜"], errors="coerce")
-
-    # 평균기온 숫자 변환
-    df["평균기온"] = pd.to_numeric(
-        df["평균기온"],
+    df["날짜"] = pd.to_datetime(
+        df["날짜"],
         errors="coerce"
     )
 
-    # 결측값 제거
-    df = df.dropna(subset=["날짜", "평균기온"])
+    # 기온 데이터를 숫자로 변환
+    for column in ["최저기온", "최고기온"]:
+        df[column] = pd.to_numeric(
+            df[column],
+            errors="coerce"
+        )
+
+    # 필요한 데이터가 없는 행 제거
+    df = df.dropna(
+        subset=["날짜", "최저기온", "최고기온"]
+    )
 
     # 연도 추출
     df["연도"] = df["날짜"].dt.year
@@ -80,29 +86,40 @@ with col2:
     )
 
 with col3:
-    st.metric(
-        "평균기온 평균",
-        f"{filtered['평균기온'].mean():.1f}℃"
+    상관계수 = filtered["최저기온"].corr(
+        filtered["최고기온"]
     )
 
-# 히스토그램
-st.subheader("일별 평균기온 분포")
+    st.metric(
+        "상관계수",
+        f"{상관계수:.2f}"
+    )
 
-fig = px.histogram(
+# 산점도
+st.subheader("일별 최저기온과 최고기온의 관계")
+
+fig = px.scatter(
     filtered,
-    x="평균기온",
-    nbins=30,
+    x="최저기온",
+    y="최고기온",
+    hover_data=["날짜"],
     labels={
-        "평균기온": "일별 평균기온 (℃)",
-        "count": "일수"
+        "최저기온": "최저기온 (℃)",
+        "최고기온": "최고기온 (℃)"
     },
-    title=f"{start_year}~{end_year}년 서울 일별 평균기온 분포"
+    title=f"{start_year}~{end_year}년 서울 일별 기온 관계"
+)
+
+fig.update_traces(
+    marker={
+        "size": 5,
+        "opacity": 0.5
+    }
 )
 
 fig.update_layout(
-    xaxis_title="일별 평균기온 (℃)",
-    yaxis_title="일수",
-    bargap=0.05
+    xaxis_title="최저기온 (℃)",
+    yaxis_title="최고기온 (℃)"
 )
 
 st.plotly_chart(
@@ -111,14 +128,16 @@ st.plotly_chart(
 )
 
 st.caption(
-    "※ 막대 하나는 일정한 온도 구간을 나타내며, "
-    "막대의 높이가 해당 온도 구간에 속하는 날짜의 수입니다."
+    "※ 점 하나는 하루를 나타냅니다. "
+    "점이 오른쪽 위로 모일수록 최저기온과 최고기온이 함께 높아지는 경향을 의미합니다."
 )
 
-# 데이터 확인
-with st.expander("원본 데이터 보기"):
+# 데이터 보기
+with st.expander("분석에 사용된 데이터 보기"):
     st.dataframe(
-        filtered,
+        filtered[
+            ["날짜", "최저기온", "최고기온"]
+        ],
         use_container_width=True,
         hide_index=True
     )
