@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import requests
 import pandas as pd
@@ -466,4 +465,3 @@ st.caption(
 st.caption(
     "※ 조회 가능한 가장 최근 날짜는 한국 시간 기준 어제입니다."
 )
-```
