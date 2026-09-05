@@ -33,10 +33,8 @@ st.caption("KOBIS 영화관입장권통합전산망")
 # 자동으로 🎬 기본 이미지가 표시됩니다.
 
 POSTER_URLS = {
-    "오디세이": "https://i.namu.wiki/i/00j7QO82joVATJ9kgz8eM601BQncPhjWhl2fG6Gw4Zgo2At0Qehnzk5DA_CA6NIvfyYTvEPC06OsnaUT90SLCA.webp",
-    "영화제목2": "이미지주소2",
-    "영화제목3": "이미지주소3",
-
+    "오디세이": "https://i.namu.wiki/i/00j7QO82joVATJ9kgz8eM601BQncPhjWhl2fG6Gw4Zgo2At0Qehnzk5DA_CA6NIvfyYTvEPC06OsnaUT90SLCA.webp"
+    
     # 예시
     # "영화 제목":
     #     "https://example.com/poster.jpg",
