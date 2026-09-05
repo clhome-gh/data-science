@@ -1,120 +1,124 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 # 페이지 설정
 st.set_page_config(
-    page_title="서울 연평균 기온 변화",
+    page_title="서울 일별 평균기온 분포",
     page_icon="🌡️",
     layout="wide"
 )
 
 # 제목
-st.title("🌡️ 서울의 100년간 연평균 기온 변화")
-st.write("1907년 이후 서울의 일별 기온 데이터를 이용해 연평균 기온의 변화를 살펴봅니다.")
+st.title("🌡️ 서울의 일별 평균기온 분포")
+st.write(
+    "서울의 일별 평균기온이 어느 온도 구간에 얼마나 몰려 있는지 "
+    "히스토그램으로 확인합니다."
+)
 
 # 데이터 주소
 DATA_URL = "https://raw.githubusercontent.com/greatsong/modudata/main/data/seoul.csv"
+
 
 # 데이터 불러오기
 @st.cache_data
 def load_data():
     df = pd.read_csv(DATA_URL, encoding="utf-8-sig")
 
-    # 날짜를 날짜 형식으로 변환
+    # 날짜 변환
     df["날짜"] = pd.to_datetime(df["날짜"], errors="coerce")
 
-    # 기온 데이터를 숫자형으로 변환
-    df["평균기온"] = pd.to_numeric(df["평균기온"], errors="coerce")
+    # 평균기온 숫자 변환
+    df["평균기온"] = pd.to_numeric(
+        df["평균기온"],
+        errors="coerce"
+    )
 
-    # 날짜 또는 평균기온이 없는 행 제거
+    # 결측값 제거
     df = df.dropna(subset=["날짜", "평균기온"])
+
+    # 연도 추출
+    df["연도"] = df["날짜"].dt.year
 
     return df
 
 
 df = load_data()
 
-# 연도 추출
-df["연도"] = df["날짜"].dt.year
+# 사이드바
+st.sidebar.header("조회 조건")
 
-# 연도별 평균기온 계산
-annual_temp = (
-    df.groupby("연도")["평균기온"]
-    .mean()
-    .reset_index()
-)
-
-annual_temp.columns = ["연도", "연평균기온"]
-
-# 100년 구간 선택
-min_year = int(annual_temp["연도"].min())
-max_year = int(annual_temp["연도"].max())
-
-st.sidebar.header("조회 기간")
+min_year = int(df["연도"].min())
+max_year = int(df["연도"].max())
 
 start_year, end_year = st.sidebar.slider(
-    "연도 선택",
+    "조회 기간",
     min_value=min_year,
     max_value=max_year,
     value=(max(min_year, max_year - 99), max_year)
 )
 
-filtered = annual_temp[
-    (annual_temp["연도"] >= start_year)
-    & (annual_temp["연도"] <= end_year)
+# 선택한 기간의 데이터
+filtered = df[
+    (df["연도"] >= start_year)
+    & (df["연도"] <= end_year)
 ].copy()
 
-# 주요 정보
+# 요약 정보
 col1, col2, col3 = st.columns(3)
 
 with col1:
     st.metric(
-        "조회 시작 연도",
-        f"{start_year}년"
+        "조회 기간",
+        f"{start_year}~{end_year}년"
     )
 
 with col2:
     st.metric(
-        "조회 종료 연도",
-        f"{end_year}년"
+        "관측 일수",
+        f"{len(filtered):,}일"
     )
 
 with col3:
-    if len(filtered) > 0:
-        highest_year = filtered.loc[
-            filtered["연평균기온"].idxmax(), "연도"
-        ]
-        highest_temp = filtered["연평균기온"].max()
+    st.metric(
+        "평균기온 평균",
+        f"{filtered['평균기온'].mean():.1f}℃"
+    )
 
-        st.metric(
-            "가장 따뜻했던 해",
-            f"{int(highest_year)}년",
-            f"{highest_temp:.1f}℃"
-        )
+# 히스토그램
+st.subheader("일별 평균기온 분포")
 
-# 그래프
-st.subheader("연평균 기온 변화")
+fig = px.histogram(
+    filtered,
+    x="평균기온",
+    nbins=30,
+    labels={
+        "평균기온": "일별 평균기온 (℃)",
+        "count": "일수"
+    },
+    title=f"{start_year}~{end_year}년 서울 일별 평균기온 분포"
+)
 
-chart_data = filtered.set_index("연도")
+fig.update_layout(
+    xaxis_title="일별 평균기온 (℃)",
+    yaxis_title="일수",
+    bargap=0.05
+)
 
-st.line_chart(
-    chart_data,
-    y="연평균기온",
-    x_label="연도",
-    y_label="연평균 기온 (℃)"
+st.plotly_chart(
+    fig,
+    use_container_width=True
 )
 
 st.caption(
-    "※ 연평균 기온은 해당 연도의 일평균 기온을 평균하여 계산했습니다."
+    "※ 막대 하나는 일정한 온도 구간을 나타내며, "
+    "막대의 높이가 해당 온도 구간에 속하는 날짜의 수입니다."
 )
 
-# 데이터 표
-with st.expander("연도별 연평균 기온 데이터 보기"):
-    display_data = filtered.copy()
-    display_data["연평균기온"] = display_data["연평균기온"].round(2)
-
+# 데이터 확인
+with st.expander("원본 데이터 보기"):
     st.dataframe(
-        display_data,
+        filtered,
         use_container_width=True,
         hide_index=True
     )
