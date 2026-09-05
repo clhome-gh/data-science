@@ -58,6 +58,7 @@ display_date = selected_date.strftime(
 @st.cache_data(ttl=3600)
 def get_boxoffice(target_dt):
 
+    # Streamlit Cloud Secrets에서 인증키 가져오기
     api_key = st.secrets["KOBIS_KEY"]
 
     url = (
@@ -163,6 +164,7 @@ def get_boxoffice(target_dt):
         }
 
 
+    # 영화 목록 가져오기
     movie_list = boxoffice_result.get(
         "dailyBoxOfficeList",
         []
@@ -190,33 +192,64 @@ def get_boxoffice(target_dt):
 
 
 # ==================================================
-# 5. 위키백과에서 포스터 자동 검색
+# 5. 영화 제목으로 포스터 자동 검색
 # ==================================================
 
 @st.cache_data(ttl=86400)
 def get_poster_url(movie_name):
 
     """
-    영화 제목을 이용해서 한국어 위키백과에서
-    영화 포스터 이미지를 자동으로 검색합니다.
+    영화 제목 + '영화' 키워드로
+    한국어 위키백과에서 포스터를 자동 검색합니다.
 
-    별도의 API 키가 필요하지 않습니다.
+    별도의 포스터 API 키가 필요하지 않습니다.
     """
 
     search_url = "https://ko.wikipedia.org/w/api.php"
 
+
+    # --------------------------------------------------
+    # 검색어
+    # --------------------------------------------------
+    # 예:
+    # 파묘 → "파묘" 영화
+    # 아바타 → "아바타" 영화
+    # 범죄도시 → "범죄도시" 영화
+    # --------------------------------------------------
+
+    search_query = f'"{movie_name}" 영화'
+
+
     params = {
         "action": "query",
+
+        # 검색 결과를 페이지 형태로 받음
         "generator": "search",
-        "gsrsearch": movie_name,
+
+        # 일반 문서만 검색
         "gsrnamespace": 0,
-        "gsrlimit": 5,
+
+        # 영화 제목 + 영화 키워드
+        "gsrsearch": search_query,
+
+        # 최대 10개의 후보 확인
+        "gsrlimit": 10,
+
+        # 대표 이미지 가져오기
         "prop": "pageimages",
+
         "piprop": "thumbnail",
+
+        # 이미지 크기
         "pithumbsize": 500,
+
+        # JSON 형식
         "format": "json",
+
+        # 최신 JSON 구조
         "formatversion": 2
     }
+
 
     try:
 
@@ -224,8 +257,12 @@ def get_poster_url(movie_name):
             search_url,
             params=params,
             timeout=10,
+
             headers={
-                "User-Agent": "DailyBoxOfficeStreamlit/1.0"
+                "User-Agent": (
+                    "DailyBoxOfficeStreamlit/1.0 "
+                    "(school-project)"
+                )
             }
         )
 
@@ -234,76 +271,182 @@ def get_poster_url(movie_name):
         data = response.json()
 
     except Exception:
+
         return None
 
 
-    pages = data.get(
-        "query",
-        {}
-    ).get(
-        "pages",
-        []
+    # --------------------------------------------------
+    # 검색 결과 가져오기
+    # --------------------------------------------------
+
+    pages = (
+        data
+        .get("query", {})
+        .get("pages", [])
     )
 
 
     if not pages:
+
         return None
 
 
     # --------------------------------------------------
-    # 1순위: 영화 제목과 정확히 같은 문서
+    # 영화 제목 정리
     # --------------------------------------------------
 
-    movie_name_clean = (
+    movie_clean = (
         movie_name
         .replace(" ", "")
         .lower()
     )
 
+
+    # --------------------------------------------------
+    # 후보 영화 점수 계산
+    # --------------------------------------------------
+
+    candidates = []
+
+
     for page in pages:
 
-        page_title = page.get(
+        title = page.get(
             "title",
             ""
         )
 
-        page_title_clean = (
-            page_title
+
+        title_clean = (
+            title
             .replace(" ", "")
             .lower()
         )
 
-        if page_title_clean == movie_name_clean:
 
-            thumbnail = page.get(
-                "thumbnail"
-            )
-
-            if thumbnail:
-
-                return thumbnail.get(
-                    "source"
-                )
-
-
-    # --------------------------------------------------
-    # 2순위: 검색 결과 중 이미지가 있는 문서
-    # --------------------------------------------------
-
-    for page in pages:
-
+        # 이미지가 없는 문서는 제외
         thumbnail = page.get(
             "thumbnail"
         )
 
-        if thumbnail:
 
-            return thumbnail.get(
-                "source"
-            )
+        if not thumbnail:
+
+            continue
 
 
-    return None
+        image_url = thumbnail.get(
+            "source"
+        )
+
+
+        if not image_url:
+
+            continue
+
+
+        score = 0
+
+
+        # ==================================================
+        # ① 제목이 영화 제목과 완전히 같은 경우
+        # ==================================================
+
+        if title_clean == movie_clean:
+
+            score += 100
+
+
+        # ==================================================
+        # ② "(영화)"가 붙은 경우
+        # ==================================================
+
+        elif title_clean == movie_clean + "(영화)":
+
+            score += 120
+
+
+        # ==================================================
+        # ③ 제목이 영화 제목으로 시작하는 경우
+        # ==================================================
+
+        elif title_clean.startswith(movie_clean):
+
+            score += 70
+
+
+        # ==================================================
+        # ④ 제목 안에 영화 제목이 포함된 경우
+        # ==================================================
+
+        elif movie_clean in title_clean:
+
+            score += 50
+
+
+        # ==================================================
+        # ⑤ 제목에 "영화"가 포함되어 있으면 가산점
+        # ==================================================
+
+        if "영화" in title:
+
+            score += 30
+
+
+        # ==================================================
+        # ⑥ 제목이 "영화 제목 (영화)" 형식이면 추가 가산점
+        # ==================================================
+
+        if (
+            title_clean.startswith(movie_clean)
+            and "영화" in title_clean
+        ):
+
+            score += 20
+
+
+        candidates.append(
+            {
+                "score": score,
+                "title": title,
+                "image": image_url
+            }
+        )
+
+
+    # --------------------------------------------------
+    # 후보가 없으면 포스터 없음
+    # --------------------------------------------------
+
+    if not candidates:
+
+        return None
+
+
+    # --------------------------------------------------
+    # 점수가 높은 순서대로 정렬
+    # --------------------------------------------------
+
+    candidates.sort(
+        key=lambda x: x["score"],
+        reverse=True
+    )
+
+
+    best = candidates[0]
+
+
+    # --------------------------------------------------
+    # 점수가 너무 낮으면 잘못된 이미지일 가능성이
+    # 높기 때문에 사용하지 않음
+    # --------------------------------------------------
+
+    if best["score"] < 50:
+
+        return None
+
+
+    return best["image"]
 
 
 # ==================================================
@@ -365,6 +508,7 @@ number_columns = [
     "showCnt"
 ]
 
+
 for column in number_columns:
 
     if column in df.columns:
@@ -388,7 +532,9 @@ df = df.sort_values(
 # 11. 영화 포스터 자동 검색
 # ==================================================
 
-with st.spinner("🎬 영화 포스터를 찾는 중입니다..."):
+with st.spinner(
+    "🎬 영화 포스터를 찾는 중입니다..."
+):
 
     df["poster_url"] = df["movieNm"].apply(
         get_poster_url
@@ -417,6 +563,7 @@ first_movie = df.iloc[0]
 st.subheader(
     "🏆 1위 영화"
 )
+
 
 poster_col, info_col = st.columns(
     [1, 2]
@@ -471,7 +618,9 @@ with info_col:
         f"개봉일: {first_movie['openDt']}"
     )
 
+
     metric1, metric2, metric3 = st.columns(3)
+
 
     with metric1:
 
@@ -480,12 +629,14 @@ with info_col:
             f"{first_movie['audiCnt']:,}명"
         )
 
+
     with metric2:
 
         st.metric(
             "누적관객",
             f"{first_movie['audiAcc']:,}명"
         )
+
 
     with metric3:
 
@@ -503,6 +654,7 @@ st.subheader(
     "📊 관객수 TOP 5"
 )
 
+
 top5 = (
     df.sort_values(
         "audiCnt",
@@ -518,6 +670,7 @@ top5 = (
 # --------------------------------------------------
 
 poster_columns = st.columns(5)
+
 
 for i, (_, movie) in enumerate(
     top5.iterrows()
@@ -551,9 +704,11 @@ for i, (_, movie) in enumerate(
                 unsafe_allow_html=True
             )
 
+
         st.markdown(
             f"**{movie['movieNm']}**"
         )
+
 
         st.caption(
             f"{movie['audiCnt']:,}명"
@@ -570,6 +725,7 @@ chart_data = (
     ]
     .set_index("movieNm")
 )
+
 
 st.bar_chart(
     chart_data,
@@ -608,13 +764,16 @@ def make_rank_change(value):
 
     value = int(value)
 
+
     if value > 0:
 
         return f"🔴 ↑ {value}"
 
+
     elif value < 0:
 
         return f"🔵 ↓ {abs(value)}"
+
 
     else:
 
@@ -670,10 +829,12 @@ display_df["관객수"] = (
     .apply(lambda x: f"{x:,}")
 )
 
+
 display_df["누적관객"] = (
     display_df["누적관객"]
     .apply(lambda x: f"{x:,}")
 )
+
 
 display_df["스크린수"] = (
     display_df["스크린수"]
@@ -704,7 +865,7 @@ st.dataframe(
 
         "포스터": st.column_config.ImageColumn(
             "포스터",
-            help="자동으로 검색한 영화 포스터"
+            help="영화 제목으로 자동 검색한 포스터"
         )
 
     }
@@ -717,14 +878,18 @@ st.dataframe(
 
 st.divider()
 
+
 st.caption(
     "※ 박스오피스 데이터: "
     "영화관입장권통합전산망(KOBIS)"
 )
 
+
 st.caption(
-    "※ 포스터: 한국어 위키백과에서 영화 제목으로 자동 검색"
+    "※ 포스터: 한국어 위키백과에서 "
+    "영화 제목 + '영화' 키워드로 자동 검색"
 )
+
 
 st.caption(
     "※ 조회 가능한 가장 늦은 날짜는 "
