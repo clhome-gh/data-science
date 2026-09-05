@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 
@@ -119,4 +118,3 @@ with st.expander("연도별 연평균 기온 데이터 보기"):
         use_container_width=True,
         hide_index=True
     )
-```
