@@ -23,6 +23,12 @@ def load_data():
     if 'genre' in df.columns:
         df['genre'] = df['genre'].astype(str).apply(lambda x: x.split('|')[0].strip() if '|' in x else x.strip())
         
+    # 결측치 및 데이터 타입 정제
+    df['total_audi'] = pd.to_numeric(df['total_audi'], errors='coerce').fillna(0)
+    df['movieNm'] = df['movieNm'].fillna('알 수 없음')
+    df['genre'] = df['genre'].fillna('기타')
+    df['nation'] = df['nation'].fillna('기타')
+    
     return df
 
 # 데이터 불러오기
@@ -42,6 +48,11 @@ selected_nations = st.sidebar.multiselect(
 
 # 필터 적용
 filtered_df = df[df['nation'].isin(selected_nations)].copy()
+
+# 데이터가 비어있을 경우 예외 처리
+if filtered_df.empty:
+    st.warning("선택된 조건에 해당하는 데이터가 없습니다. 사이드바에서 필터를 다시 선택해 주세요.")
+    st.stop()
 
 # -------------------------------------------------------------
 # 1. 장르별 영화 편수 분포 (도넛 그래프)
@@ -91,8 +102,8 @@ st.info("💡 **이 그래프로 알 수 있는 것**\n전체 박스오피스 �
 st.markdown("---")
 st.header("2. 장르 및 영화별 총 관객수 분포 트리맵")
 
-# 트리맵 시각화를 위한 결측치 및 데이터 정제
-filtered_df['total_audi_str'] = filtered_df['total_audi'].apply(lambda x: f"{x:,}명")
+# 트리맵 시각화를 위한 포맷팅
+filtered_df['total_audi_str'] = filtered_df['total_audi'].apply(lambda x: f"{int(x):,}명")
 
 fig_treemap = px.treemap(
     filtered_df,
