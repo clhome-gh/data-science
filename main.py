@@ -28,6 +28,7 @@ def load_data():
     # 기타 결측치 및 데이터 타입 정제
     df['total_audi'] = pd.to_numeric(df['total_audi'], errors='coerce').fillna(0)
     df['first_scrn'] = pd.to_numeric(df['first_scrn'], errors='coerce').fillna(0)
+    df['first_week_audi'] = pd.to_numeric(df['first_week_audi'], errors='coerce').fillna(0)
     df['movieNm'] = df['movieNm'].fillna('알 수 없음')
     df['nation'] = df['nation'].fillna('기타')
     
@@ -200,12 +201,11 @@ st.markdown("---")
 st.info("💡 **이 그래프로 알 수 있는 것**\n개봉일 스크린수가 많을수록 최종 총 관객수도 증가하는 양의 상관관계 경향을 보이며, 장르별 분포와 스크린 배정 규모에 따른 흥행 차이를 비교할 수 있습니다.")
 
 # -------------------------------------------------------------
-# 5. 영화 10편 이상 장르의 총 관객수 박스플롯 (신규 추가)
+# 5. 영화 10편 이상 장르의 총 관객수 박스플롯
 # -------------------------------------------------------------
 st.markdown("---")
 st.header("5. 주요 장르별 총 관객수 분포 (상자 그림)")
 
-# 장르별 영화 편수 계산 후 10편 이상인 장르만 필터링
 genre_counts_series = filtered_df['genre'].value_counts()
 valid_genres = genre_counts_series[genre_counts_series >= 10].index
 box_df = filtered_df[filtered_df['genre'].isin(valid_genres)].copy()
@@ -238,8 +238,54 @@ else:
     st.warning("선택된 국가 중에서 영화가 10편 이상인 장르가 없습니다. 다른 국가 필터를 선택해 주세요.")
 
 # -------------------------------------------------------------
+# 6. 개봉일 스크린수 vs 총 관객수 버블 차트 (신규 추가)
+# -------------------------------------------------------------
+st.markdown("---")
+st.header("6. 개봉일 스크린수 vs 총 관객수 버블 차트 (첫 주 관객수 반영)")
+
+filtered_df['first_week_audi_str'] = filtered_df['first_week_audi'].apply(lambda x: f"{int(x):,}명")
+
+fig_bubble = px.scatter(
+    filtered_df,
+    x='first_scrn',
+    y='total_audi',
+    size='first_week_audi',
+    color='genre',
+    hover_name='movieNm',
+    labels={
+        'first_scrn': '개봉일 스크린수',
+        'total_audi': '총 관객수',
+        'genre': '장르',
+        'first_week_audi': '개봉 첫 주 관객'
+    },
+    hover_data={
+        'first_scrn_str': True, 
+        'first_scrn': False, 
+        'total_audi_str': True, 
+        'total_audi': False,
+        'first_week_audi_str': True,
+        'first_week_audi': False
+    },
+    color_discrete_sequence=px.colors.qualitative.Bold,
+    size_max=50
+)
+
+fig_bubble.update_traces(
+    hovertemplate='<b>영화명:</b> %{hovertext}<br><b>개봉일 스크린수:</b> %{customdata[0]}<br><b>총 관객수:</b> %{customdata[1]}<br><b>개봉 첫 주 관객:</b> %{customdata[2]}<extra></extra>'
+)
+fig_bubble.update_layout(
+    margin=dict(t=20, b=20, l=20, r=20),
+    height=550
+)
+
+st.plotly_chart(fig_bubble, use_container_width=True)
+
+st.markdown("---")
+st.info("💡 **이 그래프로 알 수 있는 것**\n산점도의 점 크기(버블 크기)를 통해 개봉 첫 주 관객 동원력이 얼마나 막강했는지를 함께 비교할 수 있습니다. 스크린수가 비슷하더라도 첫 주 관객 규모에 따라 최종 흥행 페이스가 어떻게 달라지는지 입체적으로 확인할 수 있습니다.")
+
+# -------------------------------------------------------------
 # 📁 원본 데이터 확인 아코디언
 # -------------------------------------------------------------
 st.markdown("---")
 with st.expander("📁 원본 데이터 및 전처리 결과 확인"):
-    st.dataframe(filtered_df.drop(columns=['total_audi_str', 'first_scrn_str'], errors='ignore'))
+    st.dataframe(filtered_df.drop(columns=['total_audi_str', 'first_scrn_str', 'first_week_audi_str'], errors='ignore'))
