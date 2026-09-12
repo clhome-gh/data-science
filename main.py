@@ -168,7 +168,7 @@ st.markdown("---")
 st.info(insight_text)
 
 # -------------------------------------------------------------
-# 4. 개봉일 스크린수와 총 관객수 산점도 (신규 추가)
+# 4. 개봉일 스크린수와 총 관객수 산점도
 # -------------------------------------------------------------
 st.markdown("---")
 st.header("4. 개봉일 스크린수 vs 총 관객수 관계 산점도")
@@ -198,6 +198,44 @@ st.plotly_chart(fig_scatter, use_container_width=True)
 
 st.markdown("---")
 st.info("💡 **이 그래프로 알 수 있는 것**\n개봉일 스크린수가 많을수록 최종 총 관객수도 증가하는 양의 상관관계 경향을 보이며, 장르별 분포와 스크린 배정 규모에 따른 흥행 차이를 비교할 수 있습니다.")
+
+# -------------------------------------------------------------
+# 5. 영화 10편 이상 장르의 총 관객수 박스플롯 (신규 추가)
+# -------------------------------------------------------------
+st.markdown("---")
+st.header("5. 주요 장르별 총 관객수 분포 (상자 그림)")
+
+# 장르별 영화 편수 계산 후 10편 이상인 장르만 필터링
+genre_counts_series = filtered_df['genre'].value_counts()
+valid_genres = genre_counts_series[genre_counts_series >= 10].index
+box_df = filtered_df[filtered_df['genre'].isin(valid_genres)].copy()
+
+if not box_df.empty:
+    fig_box = px.box(
+        box_df,
+        x='genre',
+        y='total_audi',
+        color='genre',
+        hover_name='movieNm',
+        labels={'genre': '장르', 'total_audi': '총 관객수'},
+        hover_data={'total_audi_str': True, 'total_audi': False},
+        color_discrete_sequence=px.colors.qualitative.Safe
+    )
+    
+    fig_box.update_traces(
+        hovertemplate='<b>영화명:</b> %{hovertext}<br><b>총 관객수:</b> %{customdata[0]}<extra></extra>'
+    )
+    fig_box.update_layout(
+        margin=dict(t=20, b=20, l=20, r=20),
+        height=500,
+        showlegend=False
+    )
+    st.plotly_chart(fig_box, use_container_width=True)
+    
+    st.markdown("---")
+    st.info("💡 **이 그래프로 알 수 있는 것**\n영화가 10편 이상 제작된 주요 장르들의 관객수 중앙값과 분포 범위를 비교할 수 있으며, 박스 바깥의 이상치(점)에 마우스를 올리면 각 장르에서 이례적인 대박을 터뜨린 대표 영화들을 확인할 수 있습니다.")
+else:
+    st.warning("선택된 국가 중에서 영화가 10편 이상인 장르가 없습니다. 다른 국가 필터를 선택해 주세요.")
 
 # -------------------------------------------------------------
 # 📁 원본 데이터 확인 아코디언
