@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import numpy as np
 
 # 페이지 설정
 st.set_page_config(
@@ -94,7 +95,7 @@ with col2:
 
 # '이 그래프로 알 수 있는 것' 구역 나누기
 st.markdown("---")
-st.info("💡 **이 그래프로 알 수 있는 것**\n전체 박스오피스 상위권 영화 중 특정 장르(예: 드라마, 액션 등)가 차지하는 비중을 한눈에 파악할 수 있으며, 관객들의 선호도가 집중되는 주력 장르 경향을 확인할 수 있습니다.")
+st.info("💡 **이 그래프로 알 수 있는 것**\n전체 영화 중 특정 장르가 차지하는 비중을 한눈에 파악할 수 있으며, 관객들의 선호도가 집중되는 주력 장르 경향을 확인할 수 있습니다.")
 
 # -------------------------------------------------------------
 # 2. 장르별 영화 트리맵 (총 관객수 기준)
@@ -126,8 +127,58 @@ st.plotly_chart(fig_treemap, use_container_width=True)
 
 # '이 그래프로 알 수 있는 것' 구역 나누기
 st.markdown("---")
-st.info("💡 **이 그래프로 알 수 있는 것**\n각 장르 영역 안에서 어떤 영화가 가장 많은 관객을 동원했는지 면적(총 관객수)을 통해 직관적으로 비교할 수 있으며, 특정 장르의 흥행 파워와 블록버스터 영화들의 분포를 한눈에 파악할 수 있습니다.")
+st.info("💡 **이 그래프로 알 수 있는 것**\n각 장르 내에서 어떤 영화가 가장 흥행했는지 면적(총 관객수)을 통해 직관적으로 비교할 수 있습니다.")
 
-# 원본 데이터 확인 아코디언
+# -------------------------------------------------------------
+# 3. 총 관객수 히스토그램 (분포 확인)
+# -------------------------------------------------------------
+st.markdown("---")
+st.header("3. 총 관객수 분포 (히스토그램)")
+
+# 히스토그램 생성
+fig_hist = px.histogram(
+    filtered_df,
+    x='total_audi',
+    nbins=30,
+    color_discrete_sequence=['#636EFA'],
+    labels={'total_audi': '총 관객수'}
+)
+fig_hist.update_traces(hovertemplate='총 관객수 구간: %{x}<br>영화 편수: %{y}편<extra></extra>')
+fig_hist.update_layout(
+    yaxis_title="영화 편수",
+    xaxis_title="총 관객수",
+    margin=dict(t=20, b=20, l=20, r=20)
+)
+
+st.plotly_chart(fig_hist, use_container_width=True)
+
+# 데이터에 기반한 자동 인사이트 계산 로직 (오류 방지 적용)
+insight_text = ""
+if not filtered_df.empty and filtered_df['total_audi'].sum() > 0:
+    # 1. 가장 관객이 많은 영화 찾기
+    max_movie_idx = filtered_df['total_audi'].idxmax()
+    max_movie_name = filtered_df.loc[max_movie_idx, 'movieNm']
+    max_movie_audi = int(filtered_df.loc[max_movie_idx, 'total_audi'])
+    
+    # 2. 가장 영화가 많이 몰려있는 구간 찾기 (numpy 활용)
+    counts, bin_edges = np.histogram(filtered_df['total_audi'].dropna(), bins=30)
+    max_bin_index = counts.argmax()
+    bin_start = int(bin_edges[max_bin_index])
+    bin_end = int(bin_edges[max_bin_index + 1])
+    
+    insight_text = f"💡 **이 그래프로 알 수 있는 것**\n"
+    insight_text += f"- **관객수 집중 구간:** 대부분의 영화가 **{bin_start:,}명 ~ {bin_end:,}명** 구간에 몰려 있는 것을 확인할 수 있습니다. (전형적인 '롱테일' 분포 형태)\n"
+    insight_text += f"- **최고 흥행작:** 선택된 데이터 중 가장 관객이 많은 영화는 **'{max_movie_name}'** (총 {max_movie_audi:,}명)입니다."
+else:
+    insight_text = "💡 **이 그래프로 알 수 있는 것**\n데이터가 부족하여 분포를 분석할 수 없습니다."
+
+# 구역 나누기
+st.markdown("---")
+st.info(insight_text)
+
+# -------------------------------------------------------------
+# 📁 원본 데이터 확인 아코디언
+# -------------------------------------------------------------
+st.markdown("---")
 with st.expander("📁 원본 데이터 및 전처리 결과 확인"):
-    st.dataframe(filtered_df.drop(columns=['total_audi_str']))
+    st.dataframe(filtered_df.drop(columns=['total_audi_str'], errors='ignore'))
