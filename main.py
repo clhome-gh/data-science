@@ -19,14 +19,14 @@ def load_data():
     url = "https://raw.githubusercontent.com/greatsong/modudata/main/data/kobis_movies.csv"
     df = pd.read_csv(url)
     
-    # 장르 전처리: 세로막대 기호(|)로 여러 개 적힌 경우 첫 번째 장르만 추출
+    # 장르 전처리: 결측치를 빈 문자열로 채우고, 문자열로 변환한 뒤 첫 번째 장르만 추출
     if 'genre' in df.columns:
-        df['genre'] = df['genre'].astype(str).apply(lambda x: x.split('|')[0].strip() if '|' in x else x.strip())
+        df['genre'] = df['genre'].fillna('기타').astype(str)
+        df['genre'] = df['genre'].apply(lambda x: x.split('|')[0].strip() if '|' in x else x.strip())
         
-    # 결측치 및 데이터 타입 정제
+    # 기타 결측치 및 데이터 타입 정제
     df['total_audi'] = pd.to_numeric(df['total_audi'], errors='coerce').fillna(0)
     df['movieNm'] = df['movieNm'].fillna('알 수 없음')
-    df['genre'] = df['genre'].fillna('기타')
     df['nation'] = df['nation'].fillna('기타')
     
     return df
