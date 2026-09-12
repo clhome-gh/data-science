@@ -157,6 +157,3 @@ st.text_input(
     placeholder="추가할 그래프의 의미를 적어 보세요.",
     key="graph3_note"
 )
-st.caption(
-    "※ 조회 가능한 가장 최근 날짜는 한국 시간 기준 어제입니다."
-)
