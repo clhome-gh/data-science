@@ -1,104 +1,114 @@
-from pathlib import Path
-
-main_py = '''import streamlit as st
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+# 페이지 설정
 st.set_page_config(
     page_title="영화 데이터 그래프 도감 2 - 분포와 관계",
     page_icon="🎬",
     layout="wide"
 )
 
+# 타이틀
 st.title("🎬 영화 데이터 그래프 도감 2 - 분포와 관계")
+st.markdown("KOBIS 박스오피스 데이터를 바탕으로 영화의 다양한 분포와 관계를 시각적으로 탐색하는 대시보드입니다.")
 
-DATA_URL = "https://raw.githubusercontent.com/greatsong/modudata/main/data/kobis_movies.csv"
-
+# 데이터 로드 캐시 함수
 @st.cache_data
 def load_data():
-    df = pd.read_csv(DATA_URL)
-
-    # 개봉일: 여덟 자리 숫자 → 날짜
-    df["openDt"] = pd.to_datetime(
-        df["openDt"].astype(str),
-        format="%Y%m%d",
-        errors="coerce"
-    )
-
-    # 여러 장르가 |로 구분되어 있으면 첫 번째 장르만 사용
-    df["genre"] = (
-        df["genre"]
-        .fillna("미상")
-        .astype(str)
-        .str.split("|")
-        .str[0]
-        .str.strip()
-    )
-
+    url = "https://raw.githubusercontent.com/greatsong/modudata/main/data/kobis_movies.csv"
+    df = pd.read_csv(url)
+    
+    # 장르 전처리: 세로막대 기호(|)로 여러 개 적힌 경우 첫 번째 장르만 추출
+    if 'genre' in df.columns:
+        df['genre'] = df['genre'].astype(str).apply(lambda x: x.split('|')[0].strip() if '|' in x else x.strip())
+        
     return df
 
+# 데이터 불러오기
 try:
     df = load_data()
 except Exception as e:
-    st.error("데이터를 불러오지 못했습니다.")
-    st.exception(e)
+    st.error(f"데이터를 불러오는 중 오류가 발생했습니다: {e}")
     st.stop()
 
-# --------------------------------------------------
-# ① 장르별 영화 편수
-# --------------------------------------------------
-st.subheader("① 장르별 영화 편수")
-
-genre_counts = (
-    df["genre"]
-    .value_counts()
-    .rename_axis("genre")
-    .reset_index(name="count")
+# 사이드바 설정 (필터 기능 추가)
+st.sidebar.header("🔍 데이터 필터")
+selected_nations = st.sidebar.multiselect(
+    "제작 국가 선택",
+    options=df['nation'].dropna().unique(),
+    default=df['nation'].dropna().unique()
 )
 
-genre_counts["ratio"] = genre_counts["count"] / genre_counts["count"].sum()
+# 필터 적용
+filtered_df = df[df['nation'].isin(selected_nations)]
 
-fig = px.pie(
-    genre_counts,
-    names="genre",
-    values="count",
-    hole=0.55,
-    title="장르별 영화 편수",
-    custom_data=["count", "ratio"]
-)
+# 탭 또는 섹션 구성
+st.markdown("---")
+st.header("1. 장르별 영화 편수 분포")
 
-fig.update_traces(
-    hovertemplate=(
-        "<b>%{label}</b><br>"
-        "편수: %{customdata[0]}편<br>"
-        "비율: %{customdata[1]:.1%}"
-        "<extra></extra>"
+col1, col2 = st.columns([3, 1])
+
+with col1:
+    # 장르별 편수 집계
+    genre_counts = filtered_df['genre'].value_counts().reset_index()
+    genre_counts.columns = ['genre', 'count']
+    
+    # 플롯리 도넛 그래프 생성
+    fig_genre = px.pie(
+        genre_counts,
+        names='genre',
+        values='count',
+        hole=0.4,
+        color_discrete_sequence=px.colors.qualitative.Pastel
     )
-)
+    fig_genre.update_traces(
+        textposition='inside',
+        textinfo='percent+label',
+        hovertemplate='<b>%{label}</b><br>편수: %{value}편<br>비율: %{percent}<extra></extra>'
+    )
+    fig_genre.update_layout(
+        margin=dict(t=20, b=20, l=20, r=20),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+    )
+    st.plotly_chart(fig_genre, use_container_width=True)
 
-fig.update_layout(
-    height=550,
-    margin=dict(t=70, b=30, l=20, r=20)
-)
+with col2:
+    st.markdown("### 📊 데이터 요약")
+    st.metric("총 영화 편수", f"{len(filtered_df)}편")
+    st.metric("고유 장르 수", f"{filtered_df['genre'].nunique()}개")
+    st.markdown(f"**선택된 국가:** {', '.join(selected_nations) if selected_nations else '없음'}")
 
-st.plotly_chart(fig, use_container_width=True)
+# '이 그래프로 알 수 있는 것' 구역 나누기
+st.markdown("---")
+st.info("💡 **이 그래프로 알 수 있는 것**\n전체 박스오피스 상위권 영화 중 특정 장르(예: 드라마, 액션 등)가 차지하는 비중을 한눈에 파악할 수 있으며, 관객들의 선호도가 집중되는 주력 장르 경향을 확인할 수 있습니다.")
+
+# 추가 분석 그래프 제공 (도감의 완성도를 높이기 위해)
+st.markdown("---")
+st.header("2. 총 관객수와 개봉 첫 주 관객수의 관계")
+
+col3, col4 = st.columns([3, 1])
+
+with col3:
+    fig_scatter = px.scatter(
+        filtered_df,
+        x='first_week_audi',
+        y='total_audi',
+        color='genre',
+        hover_name='movieNm',
+        labels={'first_week_audi': '개봉 첫 주 관객수', 'total_audi': '총 관객수', 'genre': '장르'},
+        color_discrete_sequence=px.colors.qualitative.Bold
+    )
+    fig_scatter.update_layout(margin=dict(t=20, b=20, l=20, r=20))
+    st.plotly_chart(fig_scatter, use_container_width=True)
+
+with col4:
+    st.markdown("### 📈 상관관계 안내")
+    st.markdown("개봉 첫 주 성적이 총 관객수에 미치는 영향을 장르별로 비교할 수 있습니다.")
 
 st.markdown("---")
-st.markdown("### 이 그래프로 알 수 있는 것")
-st.text_input(
-    "한 문장으로 작성하세요.",
-    placeholder="예: 이 기간에는 어떤 장르의 영화가 많이 개봉했는지 알 수 있다.",
-    key="graph1_note",
-    label_visibility="collapsed"
-)
-'''
+st.info("💡 **이 그래프로 알 수 있는 것**\n개봉 첫 주의 관객 동원력이 최종 흥행(총 관객수)으로 이어지는 상관관계를 보여주며, 대부분의 영화가 첫 주 성적과 총 관객수 간에 강한 비례 관계를 보인다는 점을 확인할 수 있습니다.")
 
-requirements_txt = '''streamlit
-pandas
-plotly
-'''
-
-Path("/mnt/data/main.py").write_text(main_py, encoding="utf-8")
-Path("/mnt/data/requirements.txt").write_text(requirements_txt, encoding="utf-8")
-
-print("파일 생성 완료")
+# 원본 데이터 확인 아코디언
+with st.expander("📁 원본 데이터 및 전처리 결과 확인"):
+    st.dataframe(filtered_df)
