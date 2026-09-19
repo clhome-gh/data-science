@@ -11,17 +11,17 @@ st.set_page_config(
     page_title="영화 흥행 예측기", page_icon="🎬", layout="wide"
 )
 
-st.title("🎬 영화 흥행 예측기")
+st.title("🎬 영화 흥행 예측기 (첫 관측일 시점 예측)")
 st.markdown(
-    "KOBIS 박스오피스 데이터를 바탕으로 영화의 **총 관객 수**를 예측하는 다중"
-    " 회귀 모델 앱입니다."
+    "첫 관측일의 집계가 끝난 시점의 정보를 활용하여 영화의 **총 관객"
+    " 수**를 예측하는 다중 회귀 모델 앱입니다."
 )
 
-# ⚠️ 사후 집계 데이터 안내 문구 추가
+# ⚠️ 사후 집계 데이터 안내 문구
 st.warning(
     "⚠️ **안내사항**: 본 데이터셋(`kobis_movies.csv`)은 영화 상영 종료 후"
-    " 집계된 **사후 집계값**을 포함하고 있습니다. 따라서 실제 개봉 전 시점에서"
-    " 미래를 예측하는 순수 예측 성능이 아님을 참고해 주세요."
+    " 집계된 **사후 집계값**을 포함하고 있으므로, 순수 미래 예측 성능이 아님을"
+    " 참고해 주세요."
 )
 
 
@@ -57,9 +57,56 @@ def format_date(d_str):
 
 period_str = f"{format_date(min_date_raw)} ~ {format_date(max_date_raw)}"
 
+
+# --- [추가 요구사항] '상영당 관객 수' 속성 생성 ---
+# 일관객 / 상영횟수 계산을 위해 kobis_daily 데이터를 활용하거나,
+# kobis_movies 표에 첫 관측일 일관객 정보가 있는 경우 해당 값을 활용합니다.
+#kobisc_movies에는 직접적인 '첫 일관객' 컬럼이 없으므로 kobis_daily에서 각 영화별 첫 등장일(first_date 또는 최소 날짜)의 일관객/상영횟수를 매칭하거나,
+# 또는 데이터 구조상 kobis_daily에서 영화코드별 첫 날 데이터를 가져와 계산합니다.
+def create_screening_audi_feature(df_d, df_m):
+  # kobis_daily에서 각 영화코드별 가장 빠른 날짜의 일관객, 상영횟수 추출
+  # 혹은 kobis_movies에 'first_week_audi' 등이 있으나 '첫 관측일' 기준이므로 daily에서 추출
+  df_d_sorted = df_d.sort_values(["영화코드", "날짜"])
+  first_days = df_d_sorted.groupby("영화코드").first().reset_index()
+
+  # 일관객 / 상영횟수 계산 (0으로 나누는 것 방지)
+  first_days["audi_per_show"] = np.where(
+      first_days["상영횟수"] > 0,
+      first_days["일관객"] / first_days["상영횟수"],
+      0,
+  )
+
+  # df_movies와 병합
+  merged = pd.merge(
+      df_m,
+      first_days[["영화코드", "audi_per_show"]],
+      left_on="movieCd",
+      right_on="영화코드",
+      how="left",
+  )
+  if "영화코드" in merged.columns:
+    merged = merged.drop(columns=["영화코드"])
+  return merged
+
+
+df_movies = create_screening_audi_feature(df_daily, df_movies)
+
 # 2. 데이터 요약 및 상위 10줄 표시
-st.subheader("📊 영화 정보 표 (상위 10개 행)")
+st.subheader("📊 영화 정보 표 (상위 10개 행 - '상영당 관객 수' 포함)")
 st.dataframe(df_movies.head(10), use_container_width=True)
+
+# --- [추가 요구사항] '상영당 관객 수' 분포 히스토그램 (Plotly) ---
+st.markdown("---")
+st.subheader("📈 '상영당 관객 수' 분포 히스토그램")
+fig_hist = px.histogram(
+    df_movies,
+    x="audi_per_show",
+    nbins=50,
+    title="영화별 상영당 관객 수 분포",
+    labels={"audi_per_show": "상영당 관객 수 (명/회)"},
+    marginal="box",  # 상단에 박스플롯 추가하여 분포 확인 용이하게 함
+)
+st.plotly_chart(fig_hist, use_container_width=True)
 
 # 3. 사이드바: 회귀 모델 변수 선택 체크박스
 st.sidebar.header("⚙️ 모델 설정")
@@ -69,6 +116,7 @@ potential_features = [
     "first_scrn",
     "first_show",
     "peak",
+    "audi_per_show",
     "first_week_audi",
     "days_in_top10",
 ]
@@ -76,6 +124,7 @@ feature_labels = {
     "first_scrn": "첫 관측일 스크린수 (first_scrn)",
     "first_show": "첫 관측일 상영횟수 (first_show)",
     "peak": "성수기 개봉 여부 (peak)",
+    "audi_per_show": "상영당 관객 수 (audi_per_show)",
     "first_week_audi": "첫 주 관객수 (first_week_audi)",
     "days_in_top10": "TOP 10 진입 일수 (days_in_top10)",
 }
@@ -83,8 +132,8 @@ feature_labels = {
 selected_features = []
 for feat in potential_features:
   if feat in df_movies.columns:
-    # 기본값으로 first_week_audi, first_scrn은 체크
-    default_val = True if feat in ["first_week_audi", "first_scrn"] else False
+    # 기본값으로 first_scrn, first_show, peak 체크
+    default_val = True if feat in ["first_scrn", "first_show", "peak"] else False
     if st.sidebar.checkbox(
         feature_labels.get(feat, feat), value=default_val
     ):
@@ -92,10 +141,10 @@ for feat in potential_features:
 
 if not selected_features:
   st.warning(
-      "⚠️ 적어도 하나의 변수를 선택해주세요. 기본값으로 'first_week_audi'를"
+      "⚠️ 적어도 하나의 변수를 선택해주세요. 기본값으로 기본 변수를"
       " 사용합니다."
   )
-  selected_features = ["first_week_audi"]
+  selected_features = ["first_scrn", "first_show", "peak"]
 
 # 4. 데이터 분할 로직 (영화코드 순 정렬 -> 열 편마다 앞 3편 테스트, 나머지 학습)
 df_movies_sorted = df_movies.sort_values("movieCd").reset_index(drop=True)
@@ -122,55 +171,51 @@ test_df = (
     else pd.DataFrame()
 )
 
-target_col = "target_audi" if "target_audi" in df_movies.columns else "total_audi"
+target_col = "total_audi"
 
-# 4-1. [추가 요구사항] 기본 변수 3가지 모델 vs 첫 주 관객 포함 모델 비교 분석 수행
-base_default_features = ["first_scrn", "first_show", "peak"]
-extended_features = ["first_scrn", "first_show", "peak", "first_week_audi"]
+# --- [추가 요구사항] 기본 변수 3개 모델 vs (기본 변수 3개 + 상영당 관객 수) 모델 R² 비교 ---
+base_features = ["first_scrn", "first_show", "peak"]
+added_features = ["first_scrn", "first_show", "peak", "audi_per_show"]
 
 
-def evaluate_model(feats):
+def evaluate_r2(feats):
   v_cols = feats + [target_col]
   tr_sub = train_df.dropna(subset=v_cols)
   te_sub = test_df.dropna(subset=v_cols)
   if len(tr_sub) == 0 or len(te_sub) == 0:
-    return None, None, 0, 0
+    return None, 0, 0
   m = LinearRegression()
   m.fit(tr_sub[feats], tr_sub[target_col])
   preds = m.predict(te_sub[feats])
-  actuals = te_sub[target_col]
-  return (
-      r2_score(actuals, preds),
-      mean_absolute_error(actuals, preds),
-      len(tr_sub),
-      len(te_sub),
-  )
+  return r2_score(te_sub[target_col], preds), len(tr_sub), len(te_sub)
 
 
-r2_base, mae_base, tr_cnt_b, te_cnt_b = evaluate_model(base_default_features)
-r2_ext, mae_ext, tr_cnt_e, te_cnt_e = evaluate_model(extended_features)
+r2_base, tr_cnt_b, te_cnt_b = evaluate_r2(base_features)
+r2_added, tr_cnt_a, te_cnt_a = evaluate_r2(added_features)
 
 st.markdown("---")
-st.subheader("⚖️ 변수 구성별 예측 점수 비교")
+st.subheader("⚖️ R² 성능 비교 (기본 변수 3개 vs 상영당 관객 수 추가)")
 col_comp1, col_comp2 = st.columns(2)
 with col_comp1:
-  st.markdown("### 🔹 기본 변수 3가지\n(`first_scrn`, `first_show`, `peak`)")
+  st.markdown("### 🔹 기본 변수 3개\n(`first_scrn`, `first_show`, `peak`)")
   if r2_base is not None:
     st.metric("결정계수 ($R^2$)", f"{r2_base:.4f}")
-    st.metric("평균 절대 오차 (MAE)", f"{mae_base:,.0f} 명")
+    st.text(f"학습 편수: {tr_cnt_b}편 / 평가 편수: {te_cnt_b}편")
   else:
-    st.warning("데이터 부족으로 계산할 수 없습니다.")
+    st.warning("데이터 부족")
 
 with col_comp2:
-  st.markdown("### 🔸 첫 주 관객 수 추가\n(+ `first_week_audi`)")
-  if r2_ext is not None:
-    st.metric("결정계수 ($R^2$)", f"{r2_ext:.4f}")
-    st.metric("평균 절대 오차 (MAE)", f"{mae_ext:,.0f} 명")
+  st.markdown(
+      "### 🔸 상영당 관객 수 추가\n(+ `audi_per_show`)"
+  )
+  if r2_added is not None:
+    st.metric("결정계수 ($R^2$)", f"{r2_added:.4f}")
+    st.text(f"학습 편수: {tr_cnt_a}편 / 평가 편수: {te_cnt_a}편")
   else:
-    st.warning("데이터 부족으로 계산할 수 없습니다.")
+    st.warning("데이터 부족")
 
 
-# 결측치 제거 (사용자가 사이드바에서 선택한 현재 설정 기준)
+# 결측치 제거 (현재 사용자가 사이드바에서 선택한 조합 기준)
 valid_cols = selected_features + [target_col]
 current_train_df = train_df.dropna(subset=valid_cols)
 current_test_df = test_df.dropna(subset=valid_cols)
@@ -187,12 +232,10 @@ col2.metric("점수를 평가한 영화 편수", f"{test_count}편")
 col3.metric("기준 기간", period_str)
 
 if test_count == 0:
-  st.error(
-      "평가할 테스트 데이터가 부족합니다. 데이터 전체 개수를 확인해주세요."
-  )
+  st.error("평가할 테스트 데이터가 부족합니다.")
   st.stop()
 
-# 6. 다중 회귀 모델 학습 및 예측 (사이드바 선택 기준)
+# 6. 다중 회귀 모델 학습 및 예측
 X_train = current_train_df[selected_features]
 y_train = current_train_df[target_col]
 X_test = current_test_df[selected_features]
@@ -202,12 +245,11 @@ model = LinearRegression()
 model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
 
-# 성능 지표
 r2 = r2_score(y_test, y_pred)
 mae = mean_absolute_error(y_test, y_pred)
 
 st.markdown("---")
-st.subheader("🎯 현재 선택 모델 성능 평가")
+st.subheader("🎯 현재 선택 모델 상세 평가")
 m1, m2 = st.columns(2)
 m1.metric("결정계수 ($R^2$)", f"{r2:.4f}")
 m2.metric("평균 절대 오차 (MAE)", f"{mae:,.0f} 명")
@@ -221,12 +263,9 @@ st.info(
     " 스케일 그래프의 바닥 영역에 고정되어 표시됩니다)"
 )
 
-# 평가 데이터프레임 구성
 eval_df = current_test_df[["movieNm", target_col]].copy()
 eval_df["actual_audi"] = y_test
 eval_df["pred_audi"] = y_pred
-
-# 로그 스케일 표현을 위해 1,000 미만 예측값은 하한선으로 클리핑하여 시각화 대응
 plot_pred = np.where(y_pred < 1000, 100, y_pred)
 eval_df["plot_pred"] = plot_pred
 
@@ -256,7 +295,6 @@ fig.update_traces(
     )
 )
 
-# 대각선 (y = x) 추가
 all_vals = pd.concat([eval_df["actual_audi"], eval_df["plot_pred"]])
 min_val = max(1, all_vals.min() / 2)
 max_val = all_vals.max() * 2
