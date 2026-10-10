@@ -210,3 +210,26 @@ if target_menu and target_menu != "-- 메뉴를 선택하세요 --":
     if menu == target_menu:
       continue
     if count >= 10:
+      if menu not in co_occurred_menus:
+        never_paired_results.append({"메뉴": menu, "등장 횟수": count})
+
+  # 등장 횟수가 많은 순으로 정렬
+  never_paired_df = pd.DataFrame(never_paired_results)
+  if not never_paired_df.empty:
+    never_paired_df = never_paired_df.sort_values(
+        by="등장 횟수", ascending=False
+    ).reset_index(drop=True)
+
+    st.success(
+        f"🎯 **'{target_menu}'**(이)가 나온 총 날수: **{target_count}일**"
+    )
+    st.write(
+        f"'{target_menu}'와(과) 단 한 번도 같이 나온 적이 없지만, 전체 10회 이상"
+        f" 등장한 메뉴 목록 (총 {len(never_paired_df)}개):"
+    )
+    st.dataframe(never_paired_df, use_container_width=True, hide_index=True)
+  else:
+    st.info(
+        f"🎯 **'{target_menu}'**(이)가 나온 총 날수: **{target_count}일**\n\n조건을"
+        " 만족하는 함께 나온 적 없는 메뉴가 없습니다."
+    )
