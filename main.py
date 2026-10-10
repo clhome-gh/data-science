@@ -5,9 +5,10 @@ import plotly.express as px
 # Define pages using st.Page
 home_page = st.Page("main.py", title="홈", icon="🧠", default=True)
 explore_page = st.Page("pages/1_탐색.py", title="데이터 탐색", icon="🔍")
+model_page = st.Page("pages/2_분류_모델.py", title="분류 모델", icon="🤖")
 
-# Setup navigation (Automatically renders sidebar menu)
-pg = st.navigation([home_page, explore_page])
+# Setup navigation (Include all pages!)
+pg = st.navigation([home_page, explore_page, model_page])
 
 # Page configuration
 st.set_page_config(
