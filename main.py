@@ -9,9 +9,10 @@ st.set_page_config(
     layout="wide"
 )
 
-# Sidebar navigation info / header
+# Sidebar navigation
 st.sidebar.title("📌 네비게이션")
-st.sidebar.info("위 메뉴에서 **탐색** 페이지를 선택하여 데이터 시각화를 확인하세요.")
+st.sidebar.page_link("main.py", label="홈 (메인)", icon="🧠")
+st.sidebar.page_link("pages/1_탐색.py", label="데이터 탐색", icon="🔍")
 
 # Title
 st.title("🧠 뇌졸중 예측 실습실")
@@ -40,6 +41,12 @@ col1.metric("전체 사람 수", f"{total_people:,} 명")
 col2.metric("열 개수", f"{num_columns} 개")
 col3.metric("뇌졸중(1) 환자 수", f"{stroke_count:,} 명")
 col4.metric("뇌졸중 비율", f"{stroke_ratio:.2f}%")
+
+st.markdown("---")
+
+# Page link banner on main screen
+st.info("👉 데이터 시각화 및 탐색 페이지로 이동하시려면 사이드바의 **[데이터 탐색]** 메뉴 또는 아래 버튼을 클릭하세요!")
+st.page_link("pages/1_탐색.py", label="데이터 탐색 페이지로 이동하기", icon="🔍")
 
 st.markdown("---")
 
