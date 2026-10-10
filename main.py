@@ -102,14 +102,24 @@ selected_menus = st.sidebar.multiselect(
     "특정 메뉴 선택 (조건 또는 결과에 포함)",
     options=all_menus,
     placeholder="메뉴를 선택하세요 (복수 선택 가능)",
+    key="rule_filter_select",
+)
+
+# 최소 동시 일수 슬라이더 (1 ~ 10, 기본값 1)
+min_co_count = st.sidebar.slider(
+    "최소 동시 일수", min_value=1, max_value=10, value=1, step=1
 )
 
 sort_by = st.sidebar.selectbox(
     "정렬 기준", ["향상도 순", "신뢰도 순", "동시 순"]
 )
 
-# 필터링 적용
+# 필터링 적용 (메뉴 및 최소 동시 일수)
 filtered_df = rules_df.copy()
+
+# 최소 동시 일수 조건 적용
+filtered_df = filtered_df[filtered_df["동시"] >= min_co_count]
+
 if selected_menus:
   filtered_df = filtered_df[
       filtered_df["조건"].isin(selected_menus)
@@ -131,7 +141,10 @@ else:
   )
 
 st.subheader("📋 연관 규칙 표")
-st.write(f"검색 결과: 총 {len(filtered_df)}건의 규칙이 있습니다.")
+st.write(
+    f"슬라이더 조건(최소 동시 {min_co_count}일 이상) 및 검색 결과에 따른 남은 규칙"
+    f" 수: **{len(filtered_df)}개**"
+)
 st.dataframe(filtered_df, use_container_width=True, hide_index=True)
 
 # 향상도 상위 10개 가로 막대그래프
@@ -158,3 +171,42 @@ if len(filtered_df) > 0:
   st.plotly_chart(fig, use_container_width=True)
 else:
   st.warning("조건에 해당하는 규칙이 없어 그래프를 표시할 수 없습니다.")
+
+# 구분선
+st.markdown("---")
+
+# "함께 나온 적 없는 짝" 화면 구현
+st.subheader("🚫 함께 나온 적 없는 짝 찾기")
+st.markdown(
+    "특정 메뉴를 골랐을 때, **그 메뉴와 같은 날 한 번도 함께 나오지 않았으면서** 혼자서는"
+    " **열흘(10일) 이상** 나온 메뉴를 찾아 보여드립니다."
+)
+
+target_menu = st.selectbox(
+    "기준 메뉴 선택",
+    options=["-- 메뉴를 선택하세요 --"] + all_menus,
+    key="never_together_select",
+)
+
+if target_menu and target_menu != "-- 메뉴를 선택하세요 --":
+  # 1. 기준 메뉴가 등장한 날들의 인덱스 혹은 식단 리스트 파악
+  target_days_indices = []
+  for idx, t in enumerate(transactions):
+    if target_menu in t:
+      target_days_indices.append(idx)
+
+  target_count = len(target_days_indices)
+
+  # 2. 기준 메뉴와 함께 등장한 적이 있는 모든 메뉴 세트 파악
+  co_occurred_menus = set()
+  for idx in target_days_indices:
+    for item in transactions[idx]:
+      if item != target_menu:
+        co_occurred_menus.add(item)
+
+  # 3. 조건을 만족하는 메뉴 찾기 (함께 나온 적 없음 + 전체 등장 횟수 10회 이상 + 기준 메뉴가 아님)
+  never_paired_results = []
+  for menu, count in item_counts.items():
+    if menu == target_menu:
+      continue
+    if count >= 10:
