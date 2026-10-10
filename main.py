@@ -1,618 +1,160 @@
-import streamlit as st
+import re
+from itertools import combinations
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import silhouette_score
-import math
+import streamlit as st
 
-
-# =========================================================
-# 기본 설정
-# =========================================================
+# 페이지 설정
 st.set_page_config(
-    page_title="영화 유형 나누기",
-    page_icon="🎬",
-    layout="wide"
+    page_title="급식 규칙 찾기", page_icon="🍱", layout="wide"
 )
 
-st.title("🎬 영화 유형 나누기")
-
-
-# =========================================================
-# 데이터 주소
-# =========================================================
-DATA_URL = (
-    "https://raw.githubusercontent.com/greatsong/modudata/main/data/"
-    "kobis_movies.csv"
+st.title("🍱 우리 학교 급식 규칙 찾기")
+st.markdown(
+    "중식 식단 데이터를 바탕으로 함께 자주 나오는 메뉴 연관 규칙을 찾아봅니다."
 )
 
 
-# =========================================================
-# 사용할 속성
-# =========================================================
-FEATURES = [
-    "스크린 수",
-    "누적 관객",
-    "10위권 일수",
-    "롱런 지수"
-]
-
-
-# 묶음 표시 기호
-CLUSTER_SYMBOLS = [
-    "㉮",
-    "㉯",
-    "㉰",
-    "㉱",
-    "㉲",
-    "㉳",
-    "㉴"
-]
-
-
-# =========================================================
-# 데이터 불러오기
-# =========================================================
 @st.cache_data
 def load_data():
-
-    df = pd.read_csv(
-        DATA_URL,
-        encoding="utf-8"
-    )
-
-    # 숫자로 변환할 열
-    numeric_columns = [
-        "first_scrn",
-        "first_show",
-        "first_date",
-        "peak",
-        "first_week_audi",
-        "total_audi",
-        "days_in_top10"
-    ]
-
-    for column in numeric_columns:
-
-        df[column] = pd.to_numeric(
-            df[column],
-            errors="coerce"
-        )
-
-    # -----------------------------------------------------
-    # 1. 스크린 수
-    # 상용로그
-    # -----------------------------------------------------
-    df["스크린 수"] = df["first_scrn"].apply(
-        lambda x:
-        math.log10(x)
-        if pd.notna(x) and x > 0
-        else float("nan")
-    )
-
-    # -----------------------------------------------------
-    # 2. 누적 관객
-    # 상용로그
-    # -----------------------------------------------------
-    df["누적 관객"] = df["total_audi"].apply(
-        lambda x:
-        math.log10(x)
-        if pd.notna(x) and x > 0
-        else float("nan")
-    )
-
-    # -----------------------------------------------------
-    # 3. 10위권 일수
-    # 그대로 사용
-    # -----------------------------------------------------
-    df["10위권 일수"] = df["days_in_top10"]
-
-    # -----------------------------------------------------
-    # 4. 롱런 지수
-    # 누적 관객 / 첫 주 관객
-    # 최대 20
-    # -----------------------------------------------------
-    df["롱런 지수"] = (
-        df["total_audi"] /
-        df["first_week_audi"]
-    ).clip(upper=20)
-
-    return df
+  url = "https://raw.githubusercontent.com/teacher188-netizen/2026-datascience/refs/heads/main/sangok_meals.csv"
+  df = pd.read_csv(url, encoding="utf-8")
+  return df
 
 
-# =========================================================
-# 데이터 불러오기
-# =========================================================
 try:
-
-    all_df = load_data()
-
+  df = load_data()
 except Exception as e:
-
-    st.error(
-        f"데이터를 불러오는 중 문제가 발생했습니다.\n\n{e}"
-    )
-
-    st.stop()
+  st.error(f"데이터를 불러오는 중 오류가 발생했습니다: {e}")
+  st.stop()
 
 
-# =========================================================
-# 분석 대상 데이터 만들기
-# =========================================================
-df = all_df.dropna(
-    subset=FEATURES + ["first_week_audi"]
-).copy()
+# 메뉴 정제 함수 (괄호 및 내용 제거)
+def clean_menu(menu_str):
+  if pd.isna(menu_str):
+    return []
+  items = str(menu_str).split("|")
+  cleaned = []
+  for item in items:
+    # 괄호와 그 안의 내용 제거 (반각 및 전각 괄호 대응)
+    item_clean = re.sub(r"\(.*?\)", "", item)
+    item_clean = re.sub(r"（.*?）", "", item_clean).strip()
+    if item_clean:
+      cleaned.append(item_clean)
+  return cleaned
 
-# 첫 주 관객이 0인 영화 제외
-df = df[
-    df["first_week_audi"] > 0
-].copy()
 
+df["cleaned_menus"] = df["메뉴"].apply(clean_menu)
 
-# =========================================================
-# 전체 편수 / 묶은 편수
-# =========================================================
-st.write(
-    f"전체 편수: **{len(all_df):,}편**"
-    f"　|　"
-    f"묶은 편수: **{len(df):,}편**"
+total_days = len(df)
+all_menus = sorted(
+    list(set(item for sublist in df["cleaned_menus"] for item in sublist))
+)
+total_menu_types = len(all_menus)
+
+# 연관 규칙 분석 (2개 메뉴 쌍)
+transactions = df["cleaned_menus"].tolist()
+total_trans = len(transactions)
+
+item_counts = {}
+for t in transactions:
+  for item in set(t):
+    item_counts[item] = item_counts.get(item, 0) + 1
+
+pair_counts = {}
+for t in transactions:
+  unique_items = sorted(list(set(t)))
+  for a, b in combinations(unique_items, 2):
+    pair_counts[(a, b)] = pair_counts.get((a, b), 0) + 1
+    pair_counts[(b, a)] = pair_counts.get((b, a), 0) + 1
+
+rules_data = []
+for (a, b), co_count in pair_counts.items():
+  supp_a_b = co_count / total_trans
+  supp_a = item_counts[a] / total_trans
+  supp_b = item_counts[b] / total_trans
+
+  confidence = co_count / item_counts[a] if item_counts[a] > 0 else 0
+  lift = confidence / supp_b if supp_b > 0 else 0
+
+  rules_data.append({
+      "조건": a,
+      "결과": b,
+      "동시": co_count,
+      "지지도": round(supp_a_b, 4),
+      "신뢰도": round(confidence, 4),
+      "향상도": round(lift, 4),
+  })
+
+rules_df = pd.DataFrame(rules_data)
+total_pairs = len(pair_counts)
+
+# 상단 요약 정보 한 줄 표시
+st.info(
+    f"📊 **급식 일수:** {total_days}일 &nbsp;|&nbsp; **메뉴 종류 수:**"
+    f" {total_menu_types}개 &nbsp;|&nbsp; **함께 나온 메뉴 쌍의 수:** {total_pairs}개"
 )
 
+# 사이드바 설정 (필터 및 정렬)
+st.sidebar.header("🔍 검색 및 정렬 설정")
 
-# =========================================================
-# 묶음 수 선택
-# =========================================================
-st.subheader("묶음 수 정하기")
-
-cluster_count = st.selectbox(
-    "묶을 영화 유형의 수를 고르세요.",
-    options=list(range(2, 8)),
-    index=1
+selected_menus = st.sidebar.multiselect(
+    "특정 메뉴 선택 (조건 또는 결과에 포함)",
+    options=all_menus,
+    placeholder="메뉴를 선택하세요 (복수 선택 가능)",
 )
 
-
-# =========================================================
-# 묶음에 사용할 속성 선택
-# =========================================================
-selected_features = st.multiselect(
-    "묶는 데 사용할 속성을 고르세요.",
-    options=FEATURES,
-    default=FEATURES
+sort_by = st.sidebar.selectbox(
+    "정렬 기준", ["향상도 순", "신뢰도 순", "동시 순"]
 )
 
+# 필터링 적용
+filtered_df = rules_df.copy()
+if selected_menus:
+  filtered_df = filtered_df[
+      filtered_df["조건"].isin(selected_menus)
+      | filtered_df["결과"].isin(selected_menus)
+  ]
 
-if len(selected_features) < 2:
-
-    st.warning(
-        "묶는 데 사용할 속성을 두 개 이상 골라 주세요."
-    )
-
-    st.stop()
-
-
-# =========================================================
-# 선택한 속성 표준화
-# =========================================================
-X = df[selected_features]
-
-scaler = StandardScaler()
-
-X_scaled = scaler.fit_transform(X)
-
-
-# =========================================================
-# 선택한 묶음 수로 K-평균 실행
-# =========================================================
-kmeans = KMeans(
-    n_clusters=cluster_count,
-    random_state=42,
-    n_init=10
-)
-
-df["군집번호"] = kmeans.fit_predict(X_scaled)
-
-
-# =========================================================
-# 누적 관객 평균이 높은 묶음부터
-# ㉮, ㉯, ㉰ ... 부여
-# =========================================================
-cluster_order = (
-    df.groupby("군집번호")["total_audi"]
-    .mean()
-    .sort_values(ascending=False)
-    .index
-    .tolist()
-)
-
-
-cluster_names = {
-    cluster: CLUSTER_SYMBOLS[i]
-    for i, cluster in enumerate(cluster_order)
-}
-
-
-df["묶음"] = df["군집번호"].map(
-    cluster_names
-)
-
-
-# 현재 묶음 순서
-current_symbols = CLUSTER_SYMBOLS[:cluster_count]
-
-
-# =========================================================
-# 2차원 산점도
-# =========================================================
-st.subheader("2차원 산점도")
-
-
-col1, col2 = st.columns(2)
-
-
-with col1:
-
-    x_2d = st.selectbox(
-        "가로축 속성",
-        FEATURES,
-        index=0,
-        key="x_2d"
-    )
-
-
-with col2:
-
-    y_2d = st.selectbox(
-        "세로축 속성",
-        FEATURES,
-        index=1,
-        key="y_2d"
-    )
-
-
-fig_2d = px.scatter(
-    df,
-    x=x_2d,
-    y=y_2d,
-    color="묶음",
-    hover_name="movieNm",
-    hover_data={
-        "묶음": True
-    },
-    category_orders={
-        "묶음": current_symbols
-    }
-)
-
-
-fig_2d.update_traces(
-    marker={
-        "size": 7
-    }
-)
-
-
-fig_2d.update_layout(
-    legend_title="묶음"
-)
-
-
-st.plotly_chart(
-    fig_2d,
-    use_container_width=True
-)
-
-
-# =========================================================
-# 3차원 산점도
-# =========================================================
-st.subheader("3차원 산점도")
-
-
-if len(selected_features) < 3:
-
-    st.info(
-        "묶는 데 사용할 속성을 세 개 이상 골라야 "
-        "3차원 산점도를 표시할 수 있습니다."
-    )
-
+# 정렬 적용
+if sort_by == "향상도 순":
+  filtered_df = filtered_df.sort_values(
+      by=["향상도", "신뢰도", "동시"], ascending=False
+  )
+elif sort_by == "신뢰도 순":
+  filtered_df = filtered_df.sort_values(
+      by=["신뢰도", "향상도", "동시"], ascending=False
+  )
 else:
-
-    col1, col2, col3 = st.columns(3)
-
-
-    with col1:
-
-        x_3d = st.selectbox(
-            "x축 속성",
-            FEATURES,
-            index=0,
-            key="x_3d"
-        )
-
-
-    with col2:
-
-        y_3d = st.selectbox(
-            "y축 속성",
-            FEATURES,
-            index=1,
-            key="y_3d"
-        )
-
-
-    with col3:
-
-        z_3d = st.selectbox(
-            "z축 속성",
-            FEATURES,
-            index=2,
-            key="z_3d"
-        )
-
-
-    fig_3d = px.scatter_3d(
-        df,
-        x=x_3d,
-        y=y_3d,
-        z=z_3d,
-        color="묶음",
-        hover_name="movieNm",
-        hover_data={
-            "묶음": True
-        },
-        category_orders={
-            "묶음": current_symbols
-        }
-    )
-
-
-    # 점을 작게 표시
-    fig_3d.update_traces(
-        marker={
-            "size": 3
-        }
-    )
-
-
-    fig_3d.update_layout(
-        legend_title="묶음"
-    )
-
-
-    st.plotly_chart(
-        fig_3d,
-        use_container_width=True
-    )
-
-
-# =========================================================
-# 묶음별 편수와 네 속성의 평균
-# =========================================================
-st.subheader("묶음별 편수와 속성 평균")
-
-
-summary = (
-    df.groupby("묶음")
-    .agg(
-        편수=("movieNm", "count"),
-        스크린_수_평균=("first_scrn", "mean"),
-        누적_관객_평균=("total_audi", "mean"),
-        십위권_일수_평균=("days_in_top10", "mean"),
-        롱런_지수_평균=("롱런 지수", "mean")
-    )
-    .reindex(current_symbols)
-    .reset_index()
-)
-
-
-summary.columns = [
-    "묶음",
-    "편수",
-    "스크린 수 평균",
-    "누적 관객 평균",
-    "10위권 일수 평균",
-    "롱런 지수 평균"
-]
-
-
-st.dataframe(
-    summary.style.format(
-        {
-            "편수": "{:,.0f}",
-            "스크린 수 평균": "{:,.1f}",
-            "누적 관객 평균": "{:,.0f}",
-            "10위권 일수 평균": "{:,.1f}",
-            "롱런 지수 평균": "{:,.2f}"
-        }
-    ),
-    use_container_width=True,
-    hide_index=True
-)
-
-
-# =========================================================
-# 묶음별 누적 관객 상위 5편
-# =========================================================
-st.subheader("묶음별 누적 관객 상위 5편")
-
-
-for group in current_symbols:
-
-    st.markdown(
-        f"### {group}"
-    )
-
-    top_movies = (
-        df[df["묶음"] == group]
-        .sort_values(
-            "total_audi",
-            ascending=False
-        )
-        .head(5)
-    )
-
-
-    if len(top_movies) == 0:
-
-        st.write(
-            "해당 묶음에 영화가 없습니다."
-        )
-
-    else:
-
-        for i, movie in enumerate(
-            top_movies["movieNm"],
-            start=1
-        ):
-
-            st.write(
-                f"{i}. {movie}"
-            )
-
-
-# =========================================================
-# 묶음 수에 따른 중심에서의 거리 제곱합
-# =========================================================
-st.subheader("묶음 수에 따른 거리 제곱합")
-
-
-# 1~7개의 묶음에 대해 각각 K-평균 실행
-sse_values = []
-
-
-for k in range(1, 8):
-
-    kmeans_test = KMeans(
-        n_clusters=k,
-        random_state=42,
-        n_init=10
-    )
-
-    kmeans_test.fit(X_scaled)
-
-    # 각 점에서 자신이 속한 중심까지의
-    # 거리 제곱의 합
-    sse_values.append(
-        kmeans_test.inertia_
-    )
-
-
-# =========================================================
-# 엘보 그래프
-# =========================================================
-fig_elbow = go.Figure()
-
-
-fig_elbow.add_trace(
-    go.Scatter(
-        x=list(range(1, 8)),
-        y=sse_values,
-        mode="lines+markers",
-        name="거리 제곱합"
-    )
-)
-
-
-# 현재 선택한 묶음 수에 세로선
-fig_elbow.add_vline(
-    x=cluster_count,
-    line_dash="dash",
-    annotation_text=f"현재 선택: {cluster_count}개",
-    annotation_position="top"
-)
-
-
-fig_elbow.update_layout(
-    xaxis_title="묶음 수",
-    yaxis_title="중심에서의 거리 제곱합",
-    xaxis=dict(
-        tickmode="linear",
-        dtick=1
-    ),
-    showlegend=False
-)
-
-
-st.plotly_chart(
-    fig_elbow,
-    use_container_width=True
-)
-
-
-# =========================================================
-# 거리 제곱합 표
-# =========================================================
-sse_table = []
-
-
-for i in range(7):
-
-    k = i + 1
-
-    current_value = sse_values[i]
-
-
-    if i == 0:
-
-        reduction = None
-
-    else:
-
-        reduction = (
-            sse_values[i - 1]
-            - current_value
-        )
-
-
-    sse_table.append(
-        {
-            "묶음 수": k,
-            "거리 제곱합": current_value,
-            "바로 앞 값에서 감소한 값": reduction
-        }
-    )
-
-
-sse_df = pd.DataFrame(
-    sse_table
-)
-
-
-st.dataframe(
-    sse_df.style.format(
-        {
-            "묶음 수": "{:,.0f}",
-            "거리 제곱합": "{:,.2f}",
-            "바로 앞 값에서 감소한 값": (
-                lambda x:
-                "" if pd.isna(x)
-                else f"{x:,.2f}"
-            )
-        }
-    ),
-    use_container_width=True,
-    hide_index=True
-)
-
-
-# =========================================================
-# 선택한 묶음 수의 실루엣 점수
-# =========================================================
-silhouette = silhouette_score(
-    X_scaled,
-    df["군집번호"]
-)
-
-
-st.write(
-    f"현재 선택한 묶음 수 **{cluster_count}개**의 "
-    f"실루엣 점수: **{silhouette:.3f}**"
-)
-
-
-st.caption(
-    "실루엣 점수는 -1에서 1 사이의 값이며, "
-    "1에 가까울수록 묶음이 서로 뚜렷하게 나뉘어 있음을 의미합니다."
-)
+  filtered_df = filtered_df.sort_values(
+      by=["동시", "향상도", "신뢰도"], ascending=False
+  )
+
+st.subheader("📋 연관 규칙 표")
+st.write(f"검색 결과: 총 {len(filtered_df)}건의 규칙이 있습니다.")
+st.dataframe(filtered_df, use_container_width=True, hide_index=True)
+
+# 향상도 상위 10개 가로 막대그래프
+st.subheader("📈 향상도 상위 규칙 그래프 (Top 10)")
+
+if len(filtered_df) > 0:
+  top_10 = filtered_df.head(10).copy()
+  # 보기 쉽게 조건 -> 결과 라벨 생성
+  top_10["규칙"] = top_10["조건"] + " ➔ " + top_10["결과"]
+  # 그래프가 상위 10개가 위에서부터 보이도록 역순 정렬
+  top_10 = top_10.sort_values(by="향상도", ascending=True)
+
+  fig = px.bar(
+      top_10,
+      x="향상도",
+      y="규칙",
+      orientation="h",
+      title="향상도(Lift) 기준 상위 규칙",
+      labels={"향상도": "향상도 (Lift)", "규칙": "메뉴 규칙 (조건 ➔ 결과)"},
+      text="향상도",
+  )
+  fig.update_traces(texttemplate="%{text:.2f}", textposition="outside")
+  fig.update_layout(height=450, margin=dict(l=20, r=20, t=40, b=20))
+  st.plotly_chart(fig, use_container_width=True)
+else:
+  st.warning("조건에 해당하는 규칙이 없어 그래프를 표시할 수 없습니다.")
