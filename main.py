@@ -9,6 +9,10 @@ st.set_page_config(
     layout="wide"
 )
 
+# Sidebar navigation info / header
+st.sidebar.title("📌 네비게이션")
+st.sidebar.info("위 메뉴에서 **탐색** 페이지를 선택하여 데이터 시각화를 확인하세요.")
+
 # Title
 st.title("🧠 뇌졸중 예측 실습실")
 st.markdown("환자의 건강 지표를 바탕으로 뇌졸중 발생 가능성을 탐색하고 예측하는 실습실입니다.")
@@ -39,17 +43,33 @@ col4.metric("뇌졸중 비율", f"{stroke_ratio:.2f}%")
 
 st.markdown("---")
 
-# 2. Metadata Table with Editable Korean Meaning
+# 2. Metadata Table with Editable Korean Meaning (Pre-filled)
 st.subheader("📋 데이터셋 열 정보")
-st.markdown("아래 표의 **우리말 뜻** 칸을 교재를 참고하여 직접 수정해 보세요.")
+st.markdown("아래 표의 **우리말 뜻** 칸을 확인하고 교재를 참고하여 수정해 보세요.")
+
+default_meanings = {
+    "id": "환자 고유 ID",
+    "gender": "성별",
+    "age": "나이",
+    "hypertension": "고혈압 여부 (0: 없음, 1: 있음)",
+    "heart_disease": "심장병 여부 (0: 없음, 1: 있음)",
+    "ever_married": "결혼 여부",
+    "work_type": "직업 유형",
+    "Residence_type": "거주지 유형",
+    "avg_glucose_level": "평균 혈당 수치",
+    "bmi": "체질량지수 (BMI)",
+    "smoking_status": "흡연 상태",
+    "stroke": "뇌졸중 발생 여부 (0: 정상, 1: 뇌졸중)"
+}
 
 columns_info = []
 for col in df.columns:
     dtype = str(df[col].dtype)
     null_count = int(df[col].isnull().sum())
+    korean_meaning = default_meanings.get(col, "")
     columns_info.append({
         "열 이름 (Column)": col,
-        "우리말 뜻": "",
+        "우리말 뜻": korean_meaning,
         "값의 종류 (Dtype)": dtype,
         "빈 값 개수 (Nulls)": null_count
     })
@@ -61,7 +81,7 @@ edited_meta_df = st.data_editor(
     meta_df,
     column_config={
         "열 이름 (Column)": st.column_config.TextColumn(disabled=True),
-        "우리말 뜻": st.column_config.TextColumn("우리말 뜻 (여기에 입력하세요)", required=False),
+        "우리말 뜻": st.column_config.TextColumn("우리말 뜻 (수정 가능)", required=False),
         "값의 종류 (Dtype)": st.column_config.TextColumn(disabled=True),
         "빈 값 개수 (Nulls)": st.column_config.NumberColumn(disabled=True)
     },
@@ -79,4 +99,4 @@ st.markdown("---")
 
 # 4. Data Source Information Section
 st.subheader("📌 데이터 출처 및 참고")
-st.text_area("데이터 출처 (교재 내용을 여기에 작성하거나 확인하세요)", value="출처: 모듈 데이터 / Kaggle Stroke Prediction Dataset", height=100)
+st.text_area("데이터 출처", value="출처: 모듈 데이터 / Kaggle Stroke Prediction Dataset", height=100)
