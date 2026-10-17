@@ -8,9 +8,10 @@ explore_page = st.Page("pages/1_탐색.py", title="데이터 탐색", icon="🔍
 model_page = st.Page("pages/2_분류_모델.py", title="분류 모델", icon="🤖")
 scoring_page = st.Page("pages/3_채점표.py", title="채점표", icon="📋")
 preprocessing_page = st.Page("pages/4_전처리.py", title="전처리", icon="🛠️")
+intro_page = st.Page("pages/5_내가_만든_모델_소개.py", title="내가 만든 모델 소개", icon="📝")
 
 # Setup navigation (Include all pages!)
-pg = st.navigation([home_page, explore_page, model_page, scoring_page, preprocessing_page])
+pg = st.navigation([home_page, explore_page, model_page, scoring_page, preprocessing_page, intro_page])
 
 # Page configuration
 st.set_page_config(
